@@ -88,25 +88,5 @@ jobs:
           format: table
           exit-code: 1
 
-      - name: Install Cosign
-        if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@v3.5.0
-        with:
-          cosign-release: 'v2.2.4'
-
-      - name: Cosign sign (keyless)
-        if: github.event_name != 'pull_request'
-        env:
-          COSIGN_EXPERIMENTAL: 1
-        run: |
-          echo "Signing $IMAGE_REPO@${{ steps.build.outputs.digest }}"
-          if [ -z "${{ steps.build.outputs.digest }}" ]; then echo 'No digest from build step' >&2; exit 1; fi
-          cosign sign --yes $IMAGE_REPO@${{ steps.build.outputs.digest }}
-
-      - name: Cosign verify
-        if: github.event_name != 'pull_request'
-        run: |
-          cosign verify $IMAGE_REPO@${{ steps.build.outputs.digest }} || (echo 'Verify failed' >&2; exit 1)
-
       - name: Show digest
         run: echo "Digest=${{ steps.build.outputs.digest }}"

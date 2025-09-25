@@ -32,6 +32,16 @@ ALWAYS deploy with the immutable digest form:
 ghcr.io/zsheak/modern-box@sha256:<DIGEST>
 ```
 
+### Current Published Digest
+Latest successful main build digest:
+```
+sha256:ce1f7b5188ef567258ac85f694c4fdb1c9a6299f615388f21635ea6ffb440acf
+```
+Pin example:
+```yaml
+image: ghcr.io/zsheak/modern-box@sha256:ce1f7b5188ef567258ac85f694c4fdb1c9a6299f615388f21635ea6ffb440acf
+```
+
 ## Quick Start (local test)
 ```bash
 docker build -t modern-box:dev .

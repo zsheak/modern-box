@@ -1,33 +1,51 @@
 # modern-box
 
-Лёгкий operational toolbox контейнер: `nats` CLI, `curl`, `jq`, `openssl`, `ca-certificates`.
-Предназначен для:
-- Одноразовых Kubernetes Jobs (bootstrap / диагностика)
-- Отладки JetStream / KV / Streams
-- Интерактивной проверки сетевых путей и TLS
+Minimal operational toolbox image: **NATS CLI**, **curl**, **jq**, **openssl**, **coreutils**, trusted **CA certificates**.
 
-Не предназначен как долгоживущий sidecar.
+> Purpose-built for short‑lived Kubernetes Jobs (bootstrap, diagnostics, JetStream / KV inspection). **Not** intended as a permanent sidecar.
 
-## Состав
-- Alpine (digest pinned)
-- nats CLI (версия через ARG + SHA256 проверка)
-- curl, jq, unzip, coreutils, openssl
+## Why another toolbox?
+Most generic debug images are either too heavy (busybox + a lot of extras) or lack deterministic supply chain controls. `modern-box` focuses on:
 
-## OCI Лейблы
-В Dockerfile присутствуют стандартные OCI labels: `title, description, source, version, revision, authors, licenses`.
+* Deterministic build (Alpine pinned by digest)
+* Verified NATS CLI binary (version + SHA256 check)
+* Minimal yet practical surface (network + JSON + crypto)
+* Strong OCI metadata (labels, revision, author)
+* Ready for secure pinning in GitOps (digest only)
 
-## Быстрый старт
-```bash
-# Локально (только для тестов, prod через GHCR):
-docker build -t modern-box:dev .
+## Features
+* Pinned Alpine base image (`ARG ALPINE_DIGEST`)
+* NATS CLI with checksum verification before install
+* Non‑root user (uid/gid 65532)
+* Clean shell entrypoint (`/bin/sh`), starts interactive easily
+* Pre-configured `NATS_URL` env (override per Job/Pod)
+* OCI labels: title, description, source, version, revision, authors, licenses
+* Optional SBOM (Syft) + vulnerability scan (Trivy) via GitHub Actions
+* Optional keyless Cosign signature (OIDC)
 
-# Подключиться к кластерному NATS (пример):
-docker run --rm -it \
-  -e NATS_URL=nats://nats.backend-dev.svc.cluster.local:4222 \
-  modern-box:dev nats --help
+## Image Tags & Digest
+Build workflow pushes:
+* `ghcr.io/zsheak/modern-box:<git-sha>`
+* Optionally `:main` (mutable convenience tag)
+ALWAYS deploy with the immutable digest form:
+```
+ghcr.io/zsheak/modern-box@sha256:<DIGEST>
 ```
 
-## Пример Kubernetes Job
+## Quick Start (local test)
+```bash
+docker build -t modern-box:dev .
+docker run --rm -it modern-box:dev nats --version
+```
+
+Connect to a remote NATS:
+```bash
+docker run --rm -it \
+  -e NATS_URL=nats://nats.backend-dev.svc.cluster.local:4222 \
+  modern-box:dev nats stream ls
+```
+
+## Kubernetes Job Example
 ```yaml
 apiVersion: batch/v1
 kind: Job
@@ -48,16 +66,64 @@ spec:
             value: nats://nats.backend.svc.cluster.local:4222
 ```
 
-## Supply chain
-- Digest pinning (используйте `@sha256:` в манифестах)
-- (Опционально) SBOM Syft и Trivy в CI (см. workflow)
-- Подпись cosign keyless (если настроен OIDC)
+## NATS CLI Cheat Sheet
+```bash
+# Streams
+nats -s $NATS_URL stream ls
+nats -s $NATS_URL stream info <STREAM>
 
-## English (brief)
-`modern-box` is a minimal operations toolbox image containing the NATS CLI, curl, jq, and OpenSSL. Use it for ad‑hoc Jobs and diagnostics; not meant to be a long‑running sidecar.
+# JetStream account report
+nats -s $NATS_URL account info
 
-## Версионирование
-`MODERN_BOX_VERSION` аргумент билда. Рекомендуется маппить git tag -> OCI label.
+# Key-Value buckets
+nats -s $NATS_URL kv ls
+nats -s $NATS_URL kv info <BUCKET>
+nats -s $NATS_URL kv get <BUCKET> <KEY>
 
-## Лицензия
-Apache-2.0. См. `LICENSE`.
+# Consumers
+nats -s $NATS_URL consumer ls <STREAM>
+nats -s $NATS_URL consumer info <STREAM> <CONSUMER>
+```
+
+## Supply Chain / Security
+| Aspect | Detail |
+|--------|--------|
+| Base | Alpine pinned via digest (`ALPINE_DIGEST`) |
+| Binary integrity | SHA256 verification for NATS CLI zip |
+| User | Non-root (modernbox:modernbox) |
+| SBOM | Generated with Syft in CI (artifact) |
+| Vulnerabilities | Trivy scan fails build on HIGH/CRITICAL |
+| Signature | Cosign keyless (if OIDC available) |
+| Deployment | Digest-only pin in Kubernetes |
+
+## Versioning
+`MODERN_BOX_VERSION` (build arg) + `org.opencontainers.image.version` label. Recommend mapping Git tags to semantic versions and adding an annotated tag when releasing.
+
+## Deterministic Rebuild
+Rebuild only changes if:
+1. `ALPINE_DIGEST` updated
+2. `NATSCLI_VERSION` or its SHA256 changes
+3. Dockerfile / metadata altered
+4. Build args (`MODERN_BOX_VERSION`, `GIT_SHA`, `BUILD_AUTHOR`) differ
+
+## Obtaining the Digest After CI
+From GitHub Actions log step “Show digest” or locally:
+```bash
+docker pull ghcr.io/zsheak/modern-box:main
+docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/zsheak/modern-box:main
+```
+
+## Future Enhancements (Ideas)
+* Optional `busybox-extras` (behind build arg)
+* Multi-arch (arm64) build matrix
+* Embedded lightweight `kubectl` (separate flavor, not default)
+* Tag automation from conventional commits
+
+## Contributing
+Open an issue or PR — keep diffs minimal and deterministic. No unpinned images.
+
+## License
+MIT — see `LICENSE`.
+
+---
+Feel free to propose additional minimal tools as long as they keep the image lean and reproducible.
